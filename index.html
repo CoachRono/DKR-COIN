@@ -17,7 +17,6 @@
         .secondary-btn { background: transparent; color: var(--dkr-blue); border: 1px solid var(--dkr-blue); margin-top: 15px; }
         .status { margin-top: 15px; font-size: 0.8rem; color: #4ade80; line-height: 1.5; word-wrap: break-word; }
         .admin-section { margin-top: 30px; padding-top: 20px; border-top: 1px dashed #334155; }
-        .error-msg { color: #f87171; font-weight: bold; margin-top: 10px; display: none; }
     </style>
 </head>
 <body>
@@ -27,7 +26,6 @@
         
         <button id="connectBtn" class="btn">CONNECT WALLET</button>
         <div id="walletAddress" class="status">Waiting for connection...</div>
-        <div id="errorDisplay" class="error-msg"></div>
 
         <hr style="border: 0.5px solid #334155; margin: 25px 0;">
         
@@ -45,10 +43,8 @@
         document.addEventListener('DOMContentLoaded', () => {
             let provider, signer, account, dkrContract;
 
-            // --- 1. CONFIGURATION (STRICT VALIDATION) ---
-            const RAW_CONTRACT = "0xYourContractAddressHere"; 
-            const DKR_CONTRACT_ADDRESS = RAW_CONTRACT.trim(); // Auto-removes ENS-triggering spaces
-            
+            // --- YOUR CONFIGURATION ---
+            const DKR_CONTRACT_ADDRESS = "0xa423a18a1fd87E8C5e6aE50eA0166041f36eae7E"; 
             const DKR_ABI = [
                 "function balanceOf(address owner) view returns (uint256)",
                 "function decimals() view returns (uint8)",
@@ -59,49 +55,37 @@
             const dkrOutput = document.getElementById('dkrOutput');
             const connectBtn = document.getElementById('connectBtn');
             const mintBtn = document.getElementById('mintBtn');
-            const errorDisplay = document.getElementById('errorDisplay');
-
-            // --- 2. PRE-FLIGHT UI CHECK ---
-            if (!ethers.utils.isAddress(DKR_CONTRACT_ADDRESS)) {
-                errorDisplay.style.display = "block";
-                errorDisplay.innerText = "Error: Invalid Contract Address in Code.";
-                console.error("The address provided is not a valid Ethereum address.");
-            }
 
             usdInput.addEventListener('input', () => { 
                 dkrOutput.innerText = (usdInput.value * 1.25).toFixed(2); 
             });
 
-            // --- 3. CONNECTION LOGIC ---
             connectBtn.onclick = async () => {
-                errorDisplay.style.display = "none"; // Reset errors on click
-
                 if (typeof window.ethereum !== 'undefined') {
                     try {
-                        provider = new ethers.providers.Web3Provider(window.ethereum);
-                        
-                        // Request accounts from MetaMask
-                        const accounts = await provider.send("eth_requestAccounts", []);
+                        // Request accounts
+                        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
                         account = accounts[0];
+                        
+                        provider = new ethers.providers.Web3Provider(window.ethereum);
                         signer = provider.getSigner();
 
-                        // Only create contract if address passed the pre-flight check
+                        // Safety check: Validate the contract address format before creating the object
                         if (ethers.utils.isAddress(DKR_CONTRACT_ADDRESS)) {
                             dkrContract = new ethers.Contract(DKR_CONTRACT_ADDRESS, DKR_ABI, signer);
                             connectBtn.innerText = "CONNECTED";
                             updateBalance();
+                        } else {
+                            alert("The Contract Address in the code is invalid.");
                         }
                     } catch (err) {
-                        console.error("Connection failed", err);
-                        errorDisplay.style.display = "block";
-                        errorDisplay.innerText = "Connection Failed. Check MetaMask.";
+                        console.error("User denied account access or error occurred:", err);
                     }
                 } else {
-                    alert("Please install MetaMask to use DKR COIN.");
+                    alert("MetaMask not found! Please install it.");
                 }
             };
 
-            // --- 4. DATA FETCHING ---
             async function updateBalance() {
                 if (!dkrContract || !account) return;
                 try {
@@ -113,28 +97,26 @@
                         `Wallet: ${account.substring(0,6)}...${account.substring(38)}<br>` +
                         `<strong style="color: var(--dkr-blue)">Balance: ${formatted} DKR</strong>`;
                 } catch (e) {
-                    console.error("Balance fetch error:", e);
-                    errorDisplay.style.display = "block";
-                    errorDisplay.innerText = "Network Error. Are you on the right chain?";
+                    console.error("Balance fetch failed. Are you on the right network?", e);
+                    document.getElementById('walletAddress').innerText = "Error: Check Network";
                 }
             }
 
-            // --- 5. MINTING LOGIC ---
             mintBtn.onclick = async () => {
                 if (!dkrContract) return alert("Connect Wallet first!");
-                const amountToMint = usdInput.value * 1.25;
-                if (amountToMint <= 0) return alert("Enter a USD amount.");
+                const amount = usdInput.value * 1.25;
+                if (amount <= 0) return alert("Enter a USD amount.");
 
                 try {
                     mintBtn.innerText = "MINTING...";
-                    // parseUnits handles decimal precision safely
-                    const tx = await dkrContract.issueDKR(account, ethers.utils.parseUnits(amountToMint.toString(), 0));
+                    // Using parseUnits with 0 to match your likely contract setup
+                    const tx = await dkrContract.issueDKR(account, ethers.utils.parseUnits(amount.toString(), 0));
                     await tx.wait();
-                    alert("Success! DKR Coins added to your wallet.");
+                    alert("Success! DKR Coins added.");
                     updateBalance();
                 } catch (err) {
-                    console.error("Minting error:", err);
-                    alert("Mint failed. Ensure you are the Contract Owner and have gas fees.");
+                    console.error(err);
+                    alert("Mint failed. Ensure you own the contract and have POL for gas.");
                 } finally {
                     mintBtn.innerText = "MINT DKR TO WALLET";
                 }
