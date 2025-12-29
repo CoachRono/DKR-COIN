@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DKR COIN | Unified Savings</title>
-    <script src="https://cdn.ethers.io/lib/ethers-5.7.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <style>
         :root { --dkr-blue: #38bdf8; --dkr-deep: #0f172a; --dkr-card: #1e293b; }
         body { font-family: 'Inter', sans-serif; background: var(--dkr-deep); color: white; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; text-align: center; }
@@ -15,64 +15,110 @@
         .btn { background: var(--dkr-blue); color: var(--dkr-deep); border: none; width: 100%; padding: 14px; border-radius: 12px; font-weight: bold; cursor: pointer; transition: 0.2s; margin-top: 10px; }
         .btn:hover { background: #7dd3fc; transform: translateY(-2px); }
         .secondary-btn { background: transparent; color: var(--dkr-blue); border: 1px solid var(--dkr-blue); margin-top: 15px; }
-        .status { margin-top: 15px; font-size: 0.8rem; color: #4ade80; line-height: 1.5; }
+        .status { margin-top: 15px; font-size: 0.8rem; color: #4ade80; line-height: 1.5; word-wrap: break-word; }
         .admin-section { margin-top: 30px; padding-top: 20px; border-top: 1px dashed #334155; }
     </style>
 </head>
 <body>
+
     <div class="container">
         <h1>DKR COIN</h1>
         <p>Simplified Multi-Currency Savings</p>
+        
         <button id="connectBtn" class="btn">CONNECT WALLET</button>
         <div id="walletAddress" class="status"></div>
+
         <hr style="border: 0.5px solid #334155; margin: 25px 0;">
+
         <label style="font-size: 0.8rem; display: block; text-align: left;">Simulated USD Deposit</label>
         <input type="number" id="usdInput" placeholder="0.00">
         <div style="font-size: 0.9rem; margin: 10px 0;">Receiving: <span id="dkrOutput" style="color: var(--dkr-blue); font-weight: bold;">0.00</span> DKR</div>
+
         <div class="admin-section">
             <p style="color: #f87171; font-size: 0.7rem;">ADMIN TOOLS</p>
             <button id="mintBtn" class="btn secondary-btn">MINT DKR TO WALLET</button>
         </div>
     </div>
+
     <script>
-        let provider, signer, account, dkrContract;
-        const DKR_CONTRACT_ADDRESS = "0xYourContractAddressHere"; 
-        const DKR_ABI = ["function balanceOf(address owner) view returns (uint256)", "function decimals() view returns (uint8)", "function issueDKR(address to, uint256 amount) public", "function symbol() view returns (string)"];
-        const usdInput = document.getElementById('usdInput');
-        const dkrOutput = document.getElementById('dkrOutput');
-        usdInput.addEventListener('input', () => { dkrOutput.innerText = (usdInput.value * 1.25).toFixed(2); });
-        document.getElementById('connectBtn').onclick = async () => {
-            if (window.ethereum) {
-                provider = new ethers.providers.Web3Provider(window.ethereum);
-                await provider.send("eth_requestAccounts", []);
-                signer = provider.getSigner();
-                account = await signer.getAddress();
-                dkrContract = new ethers.Contract(DKR_CONTRACT_ADDRESS, DKR_ABI, signer);
-                document.getElementById('connectBtn').innerText = "CONNECTED";
-                updateBalance();
-            } else { alert("Please install MetaMask!"); }
-        };
-        async function updateBalance() {
-            try {
-                const balance = await dkrContract.balanceOf(account);
-                const decimals = await dkrContract.decimals();
-                const formatted = ethers.utils.formatUnits(balance, decimals);
-                document.getElementById('walletAddress').innerHTML = `Wallet: ${account.substring(0,6)}...${account.substring(38)}<br><strong style="color: var(--dkr-blue)">Balance: ${formatted} DKR</strong>`;
-            } catch (e) { console.error("Balance fetch failed", e); }
-        }
-        document.getElementById('mintBtn').onclick = async () => {
-            if (!dkrContract) return alert("Connect Wallet first!");
-            const amountToMint = usdInput.value * 1.25;
-            if (amountToMint <= 0) return alert("Enter a USD amount first.");
-            try {
-                document.getElementById('mintBtn').innerText = "MINTING...";
-                const tx = await dkrContract.issueDKR(account, ethers.utils.parseUnits(amountToMint.toString(), 0));
-                await tx.wait();
-                alert("Success! DKR Coins created.");
-                updateBalance();
-            } catch (err) { alert("Mint failed. Are you the Contract Owner?"); }
-            finally { document.getElementById('mintBtn').innerText = "MINT DKR TO WALLET"; }
-        };
+        document.addEventListener('DOMContentLoaded', () => {
+            let provider, signer, account, dkrContract;
+
+            // --- CONFIGURATION ---
+            const DKR_CONTRACT_ADDRESS = "0xYourContractAddressHere"; // <-- PASTE YOUR ADDRESS FROM REMIX
+            const DKR_ABI = [
+                "function balanceOf(address owner) view returns (uint256)",
+                "function decimals() view returns (uint8)",
+                "function issueDKR(address to, uint256 amount) public",
+                "function symbol() view returns (string)"
+            ];
+
+            const usdInput = document.getElementById('usdInput');
+            const dkrOutput = document.getElementById('dkrOutput');
+            const connectBtn = document.getElementById('connectBtn');
+            const mintBtn = document.getElementById('mintBtn');
+
+            // UI Conversion
+            usdInput.addEventListener('input', () => {
+                dkrOutput.innerText = (usdInput.value * 1.25).toFixed(2);
+            });
+
+            // Connect Wallet Function
+            connectBtn.onclick = async () => {
+                if (typeof window.ethereum !== 'undefined') {
+                    try {
+                        provider = new ethers.providers.Web3Provider(window.ethereum);
+                        // Force a request for accounts
+                        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                        account = accounts[0];
+                        signer = provider.getSigner();
+                        dkrContract = new ethers.Contract(DKR_CONTRACT_ADDRESS, DKR_ABI, signer);
+                        
+                        connectBtn.innerText = "CONNECTED";
+                        updateBalance();
+                    } catch (err) {
+                        console.error("Connection error:", err);
+                        alert("Connection failed! Check MetaMask.");
+                    }
+                } else {
+                    alert("MetaMask not found! Please install the extension.");
+                }
+            };
+
+            async function updateBalance() {
+                if (!dkrContract || !account) return;
+                try {
+                    const balance = await dkrContract.balanceOf(account);
+                    const decimals = await dkrContract.decimals();
+                    const formatted = ethers.utils.formatUnits(balance, decimals);
+                    document.getElementById('walletAddress').innerHTML = 
+                        `Wallet: ${account.substring(0,6)}...${account.substring(38)}<br>` +
+                        `<strong style="color: var(--dkr-blue)">Balance: ${formatted} DKR</strong>`;
+                } catch (e) {
+                    console.error("Balance fetch failed. Check Contract Address and Network.", e);
+                }
+            }
+
+            // Mint Function
+            mintBtn.onclick = async () => {
+                if (!dkrContract) return alert("Please connect your wallet first!");
+                const amount = usdInput.value * 1.25;
+                if (amount <= 0) return alert("Enter a USD amount above 0.");
+
+                try {
+                    mintBtn.innerText = "MINTING...";
+                    const tx = await dkrContract.issueDKR(account, ethers.utils.parseUnits(amount.toString(), 0));
+                    await tx.wait(); // Wait for confirmation
+                    alert("Success! DKR Coins added to your wallet.");
+                    updateBalance();
+                } catch (err) {
+                    console.error(err);
+                    alert("Mint failed! Are you the wallet that deployed the contract?");
+                } finally {
+                    mintBtn.innerText = "MINT DKR TO WALLET";
+                }
+            };
+        });
     </script>
 </body>
 </html>
